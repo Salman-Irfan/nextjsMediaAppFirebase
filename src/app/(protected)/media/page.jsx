@@ -6,12 +6,15 @@ import {
   collection,
   getDocs,
   addDoc,
-  doc,
   serverTimestamp,
   query,
   orderBy,
   limit,
   startAfter,
+  endAt,
+  where,
+  doc,
+  updateDoc,
 } from "firebase/firestore";
 
 const MediaPage = () => {
@@ -23,6 +26,8 @@ const MediaPage = () => {
   const observerRef = useRef();
   const [commentPageState, setCommentPageState] = useState({});
   const [replyPageState, setReplyPageState] = useState({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
 
   const fetchReplies = async (mediaId, commentId, lastVisible = null) => {
     const replyQuery = query(
@@ -78,10 +83,8 @@ const MediaPage = () => {
         const media = { id: docSnap.id, ...docSnap.data() };
         if (fetchedIds.has(media.id)) return null;
         fetchedIds.add(media.id);
-
         const { comments, last } = await fetchComments(media.id);
         setCommentPageState((prev) => ({ ...prev, [media.id]: last }));
-
         return { ...media, comments };
       })
     );
@@ -93,20 +96,59 @@ const MediaPage = () => {
     setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
   };
 
+  const searchMedia = async (term) => {
+    if (!term.trim()) return fetchMedia();
+    setIsSearching(true);
+
+    const q = query(collection(db, "media"), orderBy("createdAt", "desc"));
+    const snapshot = await getDocs(q);
+    const results = await Promise.all(
+      snapshot.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        const match =
+          data.title?.toLowerCase().includes(term.toLowerCase()) ||
+          data.location?.toLowerCase().includes(term.toLowerCase());
+        if (!match) return null;
+        const { comments, last } = await fetchComments(docSnap.id);
+        setCommentPageState((prev) => ({ ...prev, [docSnap.id]: last }));
+        return { id: docSnap.id, ...data, comments };
+      })
+    );
+    setItems(results.filter(Boolean));
+    setIsSearching(false);
+  };
+
+  const handleLike = async (mediaId) => {
+    const postRef = doc(db, "media", mediaId);
+    const post = items.find((p) => p.id === mediaId);
+    const currentLikes = post?.likes || 0;
+    await updateDoc(postRef, { likes: currentLikes + 1 });
+    setItems((prev) =>
+      prev.map((p) =>
+        p.id === mediaId ? { ...p, likes: currentLikes + 1 } : p
+      )
+    );
+  };
+
   useEffect(() => {
     fetchMedia();
   }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && lastDoc && !loadingMore) {
+      if (
+        entries[0].isIntersecting &&
+        lastDoc &&
+        !loadingMore &&
+        !isSearching
+      ) {
         setLoadingMore(true);
         fetchMedia(true).then(() => setLoadingMore(false));
       }
     });
     if (observerRef.current) observer.observe(observerRef.current);
     return () => observer.disconnect();
-  }, [lastDoc, loadingMore]);
+  }, [lastDoc, loadingMore, isSearching]);
 
   const handleLoadMoreComments = async (mediaId) => {
     const last = commentPageState[mediaId];
@@ -154,18 +196,15 @@ const MediaPage = () => {
   const handleCommentSubmit = async (mediaId) => {
     const text = newComments[mediaId];
     if (!text) return;
-
     const newComment = {
       text,
       userId: auth.currentUser.uid,
       displayName: auth.currentUser.displayName,
       createdAt: new Date(),
     };
-
     const tempId = `temp-${Date.now()}-${Math.random()
       .toString(36)
       .substr(2, 9)}`;
-
     setItems((prev) =>
       prev.map((post) =>
         post.id === mediaId
@@ -179,7 +218,6 @@ const MediaPage = () => {
           : post
       )
     );
-
     await addDoc(collection(db, "media", mediaId, "comments"), {
       ...newComment,
       createdAt: serverTimestamp(),
@@ -190,18 +228,15 @@ const MediaPage = () => {
   const handleReplySubmit = async (mediaId, commentId) => {
     const text = newReplies[commentId];
     if (!text) return;
-
     const newReply = {
       text,
       userId: auth.currentUser.uid,
       displayName: auth.currentUser.displayName,
       createdAt: new Date(),
     };
-
     const tempReplyId = `temp-${Date.now()}-${Math.random()
       .toString(36)
       .substr(2, 9)}`;
-
     setItems((prev) =>
       prev.map((post) =>
         post.id === mediaId
@@ -219,7 +254,6 @@ const MediaPage = () => {
           : post
       )
     );
-
     await addDoc(
       collection(db, "media", mediaId, "comments", commentId, "replies"),
       {
@@ -253,17 +287,55 @@ const MediaPage = () => {
         You can’t upload content from here.
       </p>
 
+      <div className="max-w-xl mx-auto mb-6 space-y-2">
+        <input
+          type="text"
+          placeholder="Search by title or location..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={() => searchMedia(searchTerm)}
+            className="flex-1 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+          >
+            Search
+          </button>
+          {searchTerm && (
+            <button
+              onClick={() => {
+                setSearchTerm("");
+                fetchMedia();
+              }}
+              className="flex-1 py-2 rounded bg-gray-500 hover:bg-gray-600 text-white font-semibold"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="space-y-10 max-w-xl mx-auto">
         {items.map((item) => (
           <div
             key={item.id}
             className="bg-white dark:bg-gray-800 rounded-lg shadow"
           >
-            <img
-              src={item.url}
-              alt={item.title}
-              className="w-full h-auto object-cover"
-            />
+            {item.type === "video" ? (
+              <video
+                src={item.url}
+                controls
+                className="w-full h-auto rounded-lg"
+              />
+            ) : (
+              <img
+                src={item.url}
+                alt={item.title}
+                className="w-full h-auto object-cover rounded-lg"
+              />
+            )}
+
             <div className="p-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                 {item.title}
@@ -282,7 +354,12 @@ const MediaPage = () => {
                   👥 With: {item.people.join(", ")}
                 </p>
               )}
-
+              <button
+                onClick={() => handleLike(item.id)}
+                className="mt-2 text-blue-600 text-sm font-medium hover:underline"
+              >
+                👍 Like ({item.likes || 0})
+              </button>
               <div className="mt-4 space-y-4">
                 {item.comments.map((comment) => (
                   <div key={`${item.id}-${comment.id}`}>
@@ -374,7 +451,7 @@ const MediaPage = () => {
             </div>
           </div>
         ))}
-        <div ref={observerRef} className="h-10" />
+        {!isSearching && <div ref={observerRef} className="h-10" />}
       </div>
     </div>
   );
