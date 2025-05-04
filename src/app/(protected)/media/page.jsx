@@ -1,252 +1,334 @@
 // src/app/media/page.jsx
-'use client'
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { db, auth } from '@/firebase/config'
+"use client";
+import { useEffect, useState, useRef } from "react";
+import { db, auth } from "@/firebase/config";
 import {
   collection,
-  query,
-  orderBy,
-  limit,
-  startAfter,
   getDocs,
   addDoc,
   doc,
   serverTimestamp,
-  Timestamp
-} from 'firebase/firestore'
+  query,
+  orderBy,
+  limit,
+  startAfter,
+} from "firebase/firestore";
 
 const MediaPage = () => {
-  const [items, setItems] = useState([])
-  const [lastDoc, setLastDoc] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [newComments, setNewComments] = useState({})
-  const [newReplies, setNewReplies] = useState({})
-  const observer = useRef()
+  const [items, setItems] = useState([]);
+  const [newComments, setNewComments] = useState({});
+  const [newReplies, setNewReplies] = useState({});
+  const [lastDoc, setLastDoc] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerRef = useRef();
+  const [commentPageState, setCommentPageState] = useState({});
+  const [replyPageState, setReplyPageState] = useState({});
 
-  const fetchMedia = async (initial = false) => {
-    setLoading(true)
-    let q = query(collection(db, 'media'), orderBy('createdAt', 'desc'), limit(5))
-    if (lastDoc && !initial) {
-      q = query(q, startAfter(lastDoc))
-    }
-
-    const snapshot = await getDocs(q)
-    if (snapshot.empty) {
-      setHasMore(false)
-      setLoading(false)
-      return
-    }
-
-    const newLastDoc = snapshot.docs[snapshot.docs.length - 1]
-    setLastDoc(newLastDoc)
-
-    const data = await Promise.all(
-      snapshot.docs.map(async (mediaDoc) => {
-        const media = { id: mediaDoc.id, ...mediaDoc.data() }
-        const commentsData = await fetchPaginatedComments(media.id)
-        return { ...media, comments: commentsData.comments, commentsLastDoc: commentsData.lastDoc, hasMoreComments: commentsData.hasMore }
-      })
-    )
-
-    setItems((prev) => [...prev, ...data])
-    setLoading(false)
-  }
-
-  const fetchPaginatedComments = async (mediaId, last = null) => {
-    let q = query(collection(db, 'media', mediaId, 'comments'), orderBy('createdAt'), limit(3))
-    if (last) q = query(q, startAfter(last))
-
-    const snapshot = await getDocs(q)
-    const lastDoc = snapshot.docs[snapshot.docs.length - 1]
-
-    const comments = await Promise.all(
-      snapshot.docs.map(async (commentDoc) => {
-        const comment = { id: commentDoc.id, ...commentDoc.data() }
-        const repliesData = await fetchPaginatedReplies(mediaId, comment.id)
-        comment.replies = repliesData.replies
-        comment.repliesLastDoc = repliesData.lastDoc
-        comment.hasMoreReplies = repliesData.hasMore
-        return comment
-      })
-    )
-
-    return { comments, lastDoc, hasMore: snapshot.docs.length === 3 }
-  }
-
-  const fetchPaginatedReplies = async (mediaId, commentId, last = null) => {
-    let q = query(collection(db, 'media', mediaId, 'comments', commentId, 'replies'), orderBy('createdAt'), limit(3))
-    if (last) q = query(q, startAfter(last))
-    const snapshot = await getDocs(q)
-    const lastDoc = snapshot.docs[snapshot.docs.length - 1]
+  const fetchReplies = async (mediaId, commentId, lastVisible = null) => {
+    const replyQuery = query(
+      collection(db, "media", mediaId, "comments", commentId, "replies"),
+      orderBy("createdAt", "desc"),
+      ...(lastVisible ? [startAfter(lastVisible)] : []),
+      limit(3)
+    );
+    const replySnap = await getDocs(replyQuery);
     return {
-      replies: snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-      lastDoc,
-      hasMore: snapshot.docs.length === 3
-    }
-  }
+      replies: replySnap.docs.map((r) => ({
+        id: `${commentId}-${r.id}`,
+        ...r.data(),
+      })),
+      last: replySnap.docs[replySnap.docs.length - 1],
+    };
+  };
 
-  const loadMoreComments = async (mediaId) => {
-    const mediaIndex = items.findIndex((item) => item.id === mediaId)
-    const current = items[mediaIndex]
-    const data = await fetchPaginatedComments(mediaId, current.commentsLastDoc)
-    const updated = {
-      ...current,
-      comments: [...current.comments, ...data.comments],
-      commentsLastDoc: data.lastDoc,
-      hasMoreComments: data.hasMore
-    }
-    const newItems = [...items]
-    newItems[mediaIndex] = updated
-    setItems(newItems)
-  }
+  const fetchComments = async (mediaId, lastVisible = null) => {
+    const commentQuery = query(
+      collection(db, "media", mediaId, "comments"),
+      orderBy("createdAt", "desc"),
+      ...(lastVisible ? [startAfter(lastVisible)] : []),
+      limit(3)
+    );
+    const commentSnap = await getDocs(commentQuery);
+    const comments = await Promise.all(
+      commentSnap.docs.map(async (commentDoc) => {
+        const comment = { id: commentDoc.id, ...commentDoc.data() };
+        const { replies, last } = await fetchReplies(mediaId, comment.id);
+        setReplyPageState((prev) => ({ ...prev, [comment.id]: last }));
+        comment.replies = replies;
+        return comment;
+      })
+    );
+    return {
+      comments,
+      last: commentSnap.docs[commentSnap.docs.length - 1],
+    };
+  };
 
-  const loadMoreReplies = async (mediaId, commentId) => {
-    const mediaIndex = items.findIndex((item) => item.id === mediaId)
-    const commentIndex = items[mediaIndex].comments.findIndex((c) => c.id === commentId)
-    const data = await fetchPaginatedReplies(mediaId, commentId, items[mediaIndex].comments[commentIndex].repliesLastDoc)
-    const updatedReplies = [...items[mediaIndex].comments[commentIndex].replies, ...data.replies]
-    const updatedComment = {
-      ...items[mediaIndex].comments[commentIndex],
-      replies: updatedReplies,
-      repliesLastDoc: data.lastDoc,
-      hasMoreReplies: data.hasMore
-    }
-    const updatedComments = [...items[mediaIndex].comments]
-    updatedComments[commentIndex] = updatedComment
-    const updatedMedia = { ...items[mediaIndex], comments: updatedComments }
-    const newItems = [...items]
-    newItems[mediaIndex] = updatedMedia
-    setItems(newItems)
-  }
+  const fetchMedia = async (next = false) => {
+    const baseQuery = query(
+      collection(db, "media"),
+      orderBy("createdAt", "desc"),
+      ...(next && lastDoc ? [startAfter(lastDoc)] : []),
+      limit(5)
+    );
+    const snapshot = await getDocs(baseQuery);
+    const fetchedIds = new Set();
+    const newItems = await Promise.all(
+      snapshot.docs.map(async (docSnap) => {
+        const media = { id: docSnap.id, ...docSnap.data() };
+        if (fetchedIds.has(media.id)) return null;
+        fetchedIds.add(media.id);
+
+        const { comments, last } = await fetchComments(media.id);
+        setCommentPageState((prev) => ({ ...prev, [media.id]: last }));
+
+        return { ...media, comments };
+      })
+    );
+    const filteredItems = newItems.filter(Boolean);
+    setItems((prev) => {
+      const seen = new Set(prev.map((item) => item.id));
+      return [...prev, ...filteredItems.filter((item) => !seen.has(item.id))];
+    });
+    setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+  };
 
   useEffect(() => {
-    fetchMedia(true)
-  }, [])
+    fetchMedia();
+  }, []);
 
-  const lastItemRef = useCallback(
-    (node, index) => {
-      if (loading || !hasMore) return
-      if (observer.current) observer.current.disconnect()
-      observer.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) {
-          fetchMedia()
-        }
-      })
-      if (node) observer.current.observe(node)
-    },
-    [loading, hasMore]
-  )
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && lastDoc && !loadingMore) {
+        setLoadingMore(true);
+        fetchMedia(true).then(() => setLoadingMore(false));
+      }
+    });
+    if (observerRef.current) observer.observe(observerRef.current);
+    return () => observer.disconnect();
+  }, [lastDoc, loadingMore]);
+
+  const handleLoadMoreComments = async (mediaId) => {
+    const last = commentPageState[mediaId];
+    const { comments, last: newLast } = await fetchComments(mediaId, last);
+    setItems((prev) =>
+      prev.map((post) =>
+        post.id === mediaId
+          ? {
+              ...post,
+              comments: [...post.comments, ...comments],
+            }
+          : post
+      )
+    );
+    setCommentPageState((prev) => ({ ...prev, [mediaId]: newLast }));
+  };
+
+  const handleLoadMoreReplies = async (mediaId, commentId) => {
+    const last = replyPageState[commentId];
+    const { replies, last: newLast } = await fetchReplies(
+      mediaId,
+      commentId,
+      last
+    );
+    setItems((prev) =>
+      prev.map((post) =>
+        post.id === mediaId
+          ? {
+              ...post,
+              comments: post.comments.map((c) =>
+                c.id === commentId
+                  ? {
+                      ...c,
+                      replies: [...c.replies, ...replies],
+                    }
+                  : c
+              ),
+            }
+          : post
+      )
+    );
+    setReplyPageState((prev) => ({ ...prev, [commentId]: newLast }));
+  };
 
   const handleCommentSubmit = async (mediaId) => {
-    const text = newComments[mediaId]
-    if (!text) return
-    const optimisticComment = {
-      id: `temp-${Date.now()}`,
-      text,
-      displayName: auth.currentUser.displayName,
-      replies: [],
-      createdAt: new Date()
-    }
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === mediaId ? { ...item, comments: [...item.comments, optimisticComment] } : item
-      )
-    )
-    setNewComments({ ...newComments, [mediaId]: '' })
-    await addDoc(collection(db, 'media', mediaId, 'comments'), {
+    const text = newComments[mediaId];
+    if (!text) return;
+
+    const newComment = {
       text,
       userId: auth.currentUser.uid,
       displayName: auth.currentUser.displayName,
-      createdAt: serverTimestamp()
-    })
-  }
+      createdAt: new Date(),
+    };
+
+    const tempId = `temp-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    setItems((prev) =>
+      prev.map((post) =>
+        post.id === mediaId
+          ? {
+              ...post,
+              comments: [
+                { id: tempId, ...newComment, replies: [] },
+                ...post.comments,
+              ],
+            }
+          : post
+      )
+    );
+
+    await addDoc(collection(db, "media", mediaId, "comments"), {
+      ...newComment,
+      createdAt: serverTimestamp(),
+    });
+    setNewComments({ ...newComments, [mediaId]: "" });
+  };
 
   const handleReplySubmit = async (mediaId, commentId) => {
-    const text = newReplies[commentId]
-    if (!text) return
-    const optimisticReply = {
-      id: `temp-${Date.now()}`,
-      text,
-      displayName: auth.currentUser.displayName,
-      createdAt: new Date()
-    }
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === mediaId
-          ? {
-              ...item,
-              comments: item.comments.map((comment) =>
-                comment.id === commentId
-                  ? { ...comment, replies: [...comment.replies, optimisticReply] }
-                  : comment
-              )
-            }
-          : item
-      )
-    )
-    setNewReplies({ ...newReplies, [commentId]: '' })
-    await addDoc(collection(db, 'media', mediaId, 'comments', commentId, 'replies'), {
+    const text = newReplies[commentId];
+    if (!text) return;
+
+    const newReply = {
       text,
       userId: auth.currentUser.uid,
       displayName: auth.currentUser.displayName,
-      createdAt: serverTimestamp()
-    })
-  }
+      createdAt: new Date(),
+    };
 
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return ''
-    const date = timestamp instanceof Timestamp ? timestamp.toDate() : timestamp
-    return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
-  }
+    const tempReplyId = `temp-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    setItems((prev) =>
+      prev.map((post) =>
+        post.id === mediaId
+          ? {
+              ...post,
+              comments: post.comments.map((c) =>
+                c.id === commentId
+                  ? {
+                      ...c,
+                      replies: [...c.replies, { id: tempReplyId, ...newReply }],
+                    }
+                  : c
+              ),
+            }
+          : post
+      )
+    );
+
+    await addDoc(
+      collection(db, "media", mediaId, "comments", commentId, "replies"),
+      {
+        ...newReply,
+        createdAt: serverTimestamp(),
+      }
+    );
+    setNewReplies({ ...newReplies, [commentId]: "" });
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "";
+    const date = timestamp.toDate ? timestamp.toDate() : timestamp;
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 px-4 py-8">
-      <h2 className="text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white">
-        Media Feed
-      </h2>
+      <div className="flex justify-between items-center mb-6 max-w-xl mx-auto">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Media Feed
+        </h2>
+        <div className="bg-yellow-100 text-yellow-800 text-sm font-semibold px-4 py-1 rounded-full dark:bg-yellow-800 dark:text-yellow-100">
+          Consumer Mode
+        </div>
+      </div>
+      <p className="text-center text-xs text-gray-500 dark:text-gray-400 mb-4">
+        You can’t upload content from here.
+      </p>
+
       <div className="space-y-10 max-w-xl mx-auto">
-        {items.map((item, index) => (
+        {items.map((item) => (
           <div
-            key={`${item.id}-${index}`}
+            key={item.id}
             className="bg-white dark:bg-gray-800 rounded-lg shadow"
-            ref={index === items.length - 3 ? (node) => lastItemRef(node, index) : null}
           >
-            <img src={item.url} alt={item.title} className="w-full h-auto object-cover" />
+            <img
+              src={item.url}
+              alt={item.title}
+              className="w-full h-auto object-cover"
+            />
             <div className="p-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                 {item.title}
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Posted by {item.displayName || 'Unknown'} • {formatTimestamp(item.createdAt)}
+                Posted by {item.displayName || "Unknown"} ·{" "}
+                {formatDate(item.createdAt)}
               </p>
+              {item.location && (
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  📍 {item.location}
+                </p>
+              )}
+              {item.people && item.people.length > 0 && (
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  👥 With: {item.people.join(", ")}
+                </p>
+              )}
 
               <div className="mt-4 space-y-4">
                 {item.comments.map((comment) => (
-                  <div key={comment.id}>
+                  <div key={`${item.id}-${comment.id}`}>
                     <p className="text-sm text-gray-800 dark:text-gray-200">
-                      <span className="font-semibold">{comment.displayName}:</span> {comment.text}
-                      <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">{formatTimestamp(comment.createdAt)}</span>
+                      <span className="font-semibold">
+                        {comment.displayName}:
+                      </span>{" "}
+                      {comment.text}
+                      <span className="text-xs text-gray-400 ml-2">
+                        {formatDate(comment.createdAt)}
+                      </span>
                     </p>
                     <div className="ml-4 mt-2 space-y-2 border-l border-gray-300 dark:border-gray-600 pl-4">
                       {comment.replies.map((reply) => (
-                        <p key={reply.id} className="text-sm text-gray-700 dark:text-gray-300">
-                          <span className="font-medium">{reply.displayName}:</span> {reply.text}
-                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">{formatTimestamp(reply.createdAt)}</span>
+                        <p
+                          key={`${comment.id}-${reply.id}`}
+                          className="text-sm text-gray-700 dark:text-gray-300"
+                        >
+                          <span className="font-medium">
+                            {reply.displayName}:
+                          </span>{" "}
+                          {reply.text}
+                          <span className="text-xs text-gray-400 ml-2">
+                            {formatDate(reply.createdAt)}
+                          </span>
                         </p>
                       ))}
-                      {comment.hasMoreReplies && (
+                      {replyPageState[comment.id] && (
                         <button
-                          onClick={() => loadMoreReplies(item.id, comment.id)}
-                          className="text-xs text-blue-600 hover:underline"
+                          onClick={() =>
+                            handleLoadMoreReplies(item.id, comment.id)
+                          }
+                          className="text-sm text-blue-500 hover:underline"
                         >
                           Load more replies
                         </button>
                       )}
                       <div className="flex gap-2">
                         <input
-                          value={newReplies[comment.id] || ''}
-                          onChange={(e) => setNewReplies({ ...newReplies, [comment.id]: e.target.value })}
+                          value={newReplies[comment.id] || ""}
+                          onChange={(e) =>
+                            setNewReplies({
+                              ...newReplies,
+                              [comment.id]: e.target.value,
+                            })
+                          }
                           placeholder="Write a reply..."
                           className="w-full text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
@@ -260,10 +342,10 @@ const MediaPage = () => {
                     </div>
                   </div>
                 ))}
-                {item.hasMoreComments && (
+                {commentPageState[item.id] && (
                   <button
-                    onClick={() => loadMoreComments(item.id)}
-                    className="text-xs text-blue-600 hover:underline"
+                    onClick={() => handleLoadMoreComments(item.id)}
+                    className="text-sm text-blue-500 hover:underline"
                   >
                     Load more comments
                   </button>
@@ -272,8 +354,13 @@ const MediaPage = () => {
 
               <div className="mt-4 flex gap-2">
                 <input
-                  value={newComments[item.id] || ''}
-                  onChange={(e) => setNewComments({ ...newComments, [item.id]: e.target.value })}
+                  value={newComments[item.id] || ""}
+                  onChange={(e) =>
+                    setNewComments({
+                      ...newComments,
+                      [item.id]: e.target.value,
+                    })
+                  }
                   placeholder="Write a comment..."
                   className="w-full text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
@@ -287,12 +374,10 @@ const MediaPage = () => {
             </div>
           </div>
         ))}
-        {loading && (
-          <p className="text-center text-gray-600 dark:text-gray-400">Loading more posts...</p>
-        )}
+        <div ref={observerRef} className="h-10" />
       </div>
     </div>
-  )
-}
+  );
+};
 
 export default MediaPage;

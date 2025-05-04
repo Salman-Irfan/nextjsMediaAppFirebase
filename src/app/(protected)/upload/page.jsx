@@ -1,52 +1,59 @@
-"use client";
-import { db, storage, auth } from "@/firebase/config";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { addDoc, collection } from "firebase/firestore";
-import { useState } from "react";
+// src/app/upload/page.jsx
+'use client'
+import { db, storage, auth } from '@/firebase/config'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { addDoc, collection } from 'firebase/firestore'
+import { useState } from 'react'
 
 const UploadPage = () => {
-  const [file, setFile] = useState(null);
-  const [title, setTitle] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [file, setFile] = useState(null)
+  const [title, setTitle] = useState('')
+  const [location, setLocation] = useState('')
+  const [people, setPeople] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [success, setSuccess] = useState(false)
 
   const handleUpload = async () => {
-    if (!file || !title) return;
+    if (!file || !title) return
 
-    setUploading(true);
+    setUploading(true)
     try {
-      const storageRef = ref(storage, `media/${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const storageRef = ref(storage, `media/${file.name}`)
+      await uploadBytes(storageRef, file)
+      const url = await getDownloadURL(storageRef)
 
-      const user = auth.currentUser;
-      const displayName = user?.displayName || "Unknown";
-
-      await addDoc(collection(db, "media"), {
+      await addDoc(collection(db, 'media'), {
         title,
+        location,
+        people: people.split(',').map(p => p.trim()),
         url,
-        uid: user?.uid,
-        displayName, // ✅ now storing user's name in the media doc
+        uid: auth.currentUser?.uid,
+        displayName: auth.currentUser?.displayName || 'Unknown',
         createdAt: new Date(),
-      });
+      })
 
-      setSuccess(true);
-      setTitle("");
-      setFile(null);
+      setSuccess(true)
+      setTitle('')
+      setLocation('')
+      setPeople('')
+      setFile(null)
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error('Upload error:', error)
     } finally {
-      setUploading(false);
+      setUploading(false)
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center px-4">
-      <div className="bg-white dark:bg-gray-800 w-full max-w-md p-6 rounded shadow-md">
-        <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-white">
-          Upload New Post
-        </h2>
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center px-4 py-8">
+      <div className="flex justify-between items-center w-full max-w-md mb-4">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Upload New Post</h2>
+        <div className="bg-green-100 text-green-800 text-sm font-semibold px-4 py-1 rounded-full dark:bg-green-800 dark:text-green-100">
+          Creator Mode
+        </div>
+      </div>
 
+      <div className="bg-white dark:bg-gray-800 w-full max-w-md p-6 rounded shadow-md">
         {success && (
           <div className="mb-4 text-green-600 text-sm text-center">
             ✅ Uploaded successfully!
@@ -63,6 +70,22 @@ const UploadPage = () => {
           />
 
           <input
+            type="text"
+            placeholder="Location"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring focus:border-blue-500"
+          />
+
+          <input
+            type="text"
+            placeholder="People (comma-separated)"
+            value={people}
+            onChange={(e) => setPeople(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring focus:border-blue-500"
+          />
+
+          <input
             type="file"
             accept="image/*"
             onChange={(e) => setFile(e.target.files[0])}
@@ -74,16 +97,16 @@ const UploadPage = () => {
             disabled={uploading}
             className={`w-full py-2 px-4 rounded text-white font-semibold transition ${
               uploading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {uploading ? "Uploading..." : "Upload"}
+            {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default UploadPage;
+export default UploadPage
