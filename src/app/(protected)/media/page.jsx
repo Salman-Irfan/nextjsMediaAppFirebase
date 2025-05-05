@@ -11,14 +11,11 @@ import {
   orderBy,
   limit,
   startAfter,
-  endAt,
-  where,
-  doc,
-  updateDoc,
 } from "firebase/firestore";
 import axios from "axios";
 import { END_POINTS } from "@/constants/endPoints";
 import { getData } from "@/services/apiServices/getData";
+import { postData } from "@/services/apiServices/postData";
 
 const MediaPage = () => {
   const [items, setItems] = useState([]);
@@ -268,7 +265,7 @@ const MediaPage = () => {
       )
     );
     try {
-      await axios.post("/api/v1/media/comment", {
+      await postData(END_POINTS.MEDIA.COMMENT, {
         mediaId,
         comment: newComment,
       });
