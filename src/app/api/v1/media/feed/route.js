@@ -6,7 +6,8 @@ import {
   orderBy,
   limit,
   startAfter,
-  getFirestore,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "@/firebase/config";
 
@@ -29,14 +30,10 @@ export async function GET(request) {
       limit(pageSize)
     );
 
-    // Optional pagination support
     if (cursor) {
-      const lastDocSnap = await db
-        .collection("media")
-        .doc(cursor)
-        .get();
-
-      if (lastDocSnap.exists) {
+      const lastDocRef = doc(db, "media", cursor);
+      const lastDocSnap = await getDoc(lastDocRef);
+      if (lastDocSnap.exists()) {
         mediaQuery = query(
           collection(db, "media"),
           orderBy("createdAt", "desc"),
@@ -60,7 +57,11 @@ export async function GET(request) {
   } catch (error) {
     console.error("Error fetching media feed:", error);
     return NextResponse.json(
-      { success: false, message: "Failed to fetch media feed", error: error.message },
+      {
+        success: false,
+        message: "Failed to fetch media feed",
+        error: error.message,
+      },
       { status: 500 }
     );
   }
