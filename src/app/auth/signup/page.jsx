@@ -1,13 +1,7 @@
+// src/app/auth/signup/page.jsx
 "use client";
 import { useState } from "react";
-import {
-  createUserWithEmailAndPassword,
-  updateProfile,
-  GoogleAuthProvider,
-  signInWithPopup,
-} from "firebase/auth";
-import { auth, db } from "@/firebase/config";
-import { doc, setDoc } from "firebase/firestore";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -20,27 +14,22 @@ const SignUpPage = () => {
   const router = useRouter();
 
   const handleSignUp = async () => {
+    setError("");
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
+      const response = await axios.post("/api/v1/auth/signup", {
         email,
-        password
-      );
-      const user = userCredential.user;
-
-      await updateProfile(user, { displayName: username });
-
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        email: user.email,
-        displayName: username,
-        role: "consumer",
-        createdAt: new Date(),
+        password,
+        username,
       });
 
-      router.push("/upload");
+      if (response.data.success) {
+        router.push("/upload");
+      } else {
+        setError(response.data.message || "Signup failed");
+      }
     } catch (err) {
-      setError("Failed to create account. Please check your info.");
+      console.error("Signup Error:", err);
+      setError("Failed to create account. Please try again.");
     }
   };
 
@@ -59,23 +48,26 @@ const SignUpPage = () => {
           <input
             type="text"
             placeholder="Username"
+            value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
           />
 
           <input
             type="email"
             placeholder="Email"
+            value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
           />
 
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
               placeholder="Password"
+              value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 pr-10 border border-gray-300 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none"
+              className="w-full px-4 py-2 pr-10 border border-gray-300 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
             />
             <span
               onClick={() => setShowPassword(!showPassword)}
