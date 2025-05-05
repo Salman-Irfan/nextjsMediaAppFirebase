@@ -1,9 +1,10 @@
 // src/app/auth/signup/page.jsx
 "use client";
 import { useState } from "react";
-import axios from "axios";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { postData } from "@/services/apiServices/postData";
+import { END_POINTS } from "@/constants/endPoints";
 
 const SignUpPage = () => {
   const [email, setEmail] = useState("");
@@ -16,19 +17,18 @@ const SignUpPage = () => {
   const handleSignUp = async () => {
     setError("");
     try {
-      const response = await axios.post("/api/v1/auth/signup", {
+      const data = await postData(END_POINTS.AUTH.SIGN_UP, {
         email,
         password,
         username,
       });
 
-      if (response.data.success) {
+      if (data.success) {
         router.push("/upload");
       } else {
-        setError(response.data.message || "Signup failed");
+        setError(data.message || "Signup failed");
       }
     } catch (err) {
-      console.error("Signup Error:", err);
       setError("Failed to create account. Please try again.");
     }
   };

@@ -16,12 +16,14 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
+import axios from "axios";
 
 const MediaPage = () => {
   const [items, setItems] = useState([]);
   const [newComments, setNewComments] = useState({});
   const [newReplies, setNewReplies] = useState({});
   const [lastDoc, setLastDoc] = useState(null);
+  const [lastCursor, setLastCursor] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const observerRef = useRef();
   const [commentPageState, setCommentPageState] = useState({});
@@ -70,65 +72,83 @@ const MediaPage = () => {
   };
 
   const fetchMedia = async (next = false) => {
-    const baseQuery = query(
-      collection(db, "media"),
-      orderBy("createdAt", "desc"),
-      ...(next && lastDoc ? [startAfter(lastDoc)] : []),
-      limit(5)
-    );
-    const snapshot = await getDocs(baseQuery);
-    const fetchedIds = new Set();
-    const newItems = await Promise.all(
-      snapshot.docs.map(async (docSnap) => {
-        const media = { id: docSnap.id, ...docSnap.data() };
-        if (fetchedIds.has(media.id)) return null;
-        fetchedIds.add(media.id);
-        const { comments, last } = await fetchComments(media.id);
-        setCommentPageState((prev) => ({ ...prev, [media.id]: last }));
-        return { ...media, comments };
-      })
-    );
-    const filteredItems = newItems.filter(Boolean);
-    setItems((prev) => {
-      const seen = new Set(prev.map((item) => item.id));
-      return [...prev, ...filteredItems.filter((item) => !seen.has(item.id))];
-    });
-    setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+    try {
+      const response = await axios.get("/api/v1/media/feed", {
+        params: next && lastCursor ? { cursor: lastCursor } : {},
+      });
+
+      const newItems = await Promise.all(
+        response.data.data.map(async (media) => {
+          const { comments, last } = await fetchComments(media.id);
+          setCommentPageState((prev) => ({ ...prev, [media.id]: last }));
+          return { ...media, comments };
+        })
+      );
+
+      setItems((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...newItems.filter((item) => !seen.has(item.id))];
+      });
+
+      setLastCursor(response.data.nextCursor);
+    } catch (err) {
+      console.error("Failed to fetch media:", err);
+    }
   };
 
   const searchMedia = async (term) => {
     if (!term.trim()) return fetchMedia();
     setIsSearching(true);
-
-    const q = query(collection(db, "media"), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
-    const results = await Promise.all(
-      snapshot.docs.map(async (docSnap) => {
-        const data = docSnap.data();
-        const match =
-          data.title?.toLowerCase().includes(term.toLowerCase()) ||
-          data.location?.toLowerCase().includes(term.toLowerCase());
-        if (!match) return null;
-        const { comments, last } = await fetchComments(docSnap.id);
-        setCommentPageState((prev) => ({ ...prev, [docSnap.id]: last }));
-        return { id: docSnap.id, ...data, comments };
-      })
-    );
-    setItems(results.filter(Boolean));
-    setIsSearching(false);
+    try {
+      const response = await axios.get("/api/v1/media/search", {
+        params: { term },
+      });
+      const results = await Promise.all(
+        response.data.data.map(async (media) => {
+          const { comments, last } = await fetchComments(media.id);
+          setCommentPageState((prev) => ({ ...prev, [media.id]: last }));
+          return { ...media, comments };
+        })
+      );
+      setItems(results);
+    } catch (error) {
+      console.error("Search failed:", error);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleLike = async (mediaId) => {
-    const postRef = doc(db, "media", mediaId);
-    const post = items.find((p) => p.id === mediaId);
-    const currentLikes = post?.likes || 0;
-    await updateDoc(postRef, { likes: currentLikes + 1 });
+    const prevItems = [...items];
+    const target = items.find((item) => item.id === mediaId);
+    const prevLikes = target?.likes || 0;
+  
+    // Optimistically update the UI
     setItems((prev) =>
       prev.map((p) =>
-        p.id === mediaId ? { ...p, likes: currentLikes + 1 } : p
+        p.id === mediaId ? { ...p, likes: prevLikes + 1 } : p
       )
     );
+  
+    try {
+      const res = await axios.post("/api/v1/media/like", { mediaId });
+      const { newLikes } = res.data;
+  
+      // Update with actual server response (in case it's out of sync)
+      setItems((prev) =>
+        prev.map((p) =>
+          p.id === mediaId ? { ...p, likes: newLikes } : p
+        )
+      );
+    } catch (error) {
+      console.error("Failed to like media:", error);
+  
+      // Revert the optimistic update if server call fails
+      setItems(prevItems);
+    }
   };
+  
+  
 
   useEffect(() => {
     fetchMedia();
@@ -138,7 +158,7 @@ const MediaPage = () => {
     const observer = new IntersectionObserver((entries) => {
       if (
         entries[0].isIntersecting &&
-        lastDoc &&
+        lastCursor &&
         !loadingMore &&
         !isSearching
       ) {
@@ -148,23 +168,53 @@ const MediaPage = () => {
     });
     if (observerRef.current) observer.observe(observerRef.current);
     return () => observer.disconnect();
-  }, [lastDoc, loadingMore, isSearching]);
+  }, [lastCursor, loadingMore, isSearching]);
 
   const handleLoadMoreComments = async (mediaId) => {
     const last = commentPageState[mediaId];
-    const { comments, last: newLast } = await fetchComments(mediaId, last);
-    setItems((prev) =>
-      prev.map((post) =>
-        post.id === mediaId
-          ? {
-              ...post,
-              comments: [...post.comments, ...comments],
-            }
-          : post
-      )
-    );
-    setCommentPageState((prev) => ({ ...prev, [mediaId]: newLast }));
+  
+    try {
+      const commentQuery = query(
+        collection(db, "media", mediaId, "comments"),
+        orderBy("createdAt", "desc"),
+        ...(last ? [startAfter(last)] : []),
+        limit(3)
+      );
+  
+      const commentSnap = await getDocs(commentQuery);
+  
+      const newComments = await Promise.all(
+        commentSnap.docs.map(async (doc) => {
+          const comment = { id: doc.id, ...doc.data() };
+          const { replies, last: lastReply } = await fetchReplies(mediaId, doc.id);
+          setReplyPageState((prev) => ({ ...prev, [doc.id]: lastReply }));
+          return { ...comment, replies };
+        })
+      );
+  
+      setItems((prev) =>
+        prev.map((post) => {
+          if (post.id !== mediaId) return post;
+  
+          const seenIds = new Set(post.comments.map((c) => c.id));
+          const filtered = newComments.filter((c) => !seenIds.has(c.id));
+  
+          return {
+            ...post,
+            comments: [...post.comments, ...filtered],
+          };
+        })
+      );
+  
+      const newLast = commentSnap.docs[commentSnap.docs.length - 1];
+      if (newLast) {
+        setCommentPageState((prev) => ({ ...prev, [mediaId]: newLast }));
+      }
+    } catch (err) {
+      console.error("Failed to load more comments:", err);
+    }
   };
+  
 
   const handleLoadMoreReplies = async (mediaId, commentId) => {
     const last = replyPageState[commentId];
@@ -218,10 +268,14 @@ const MediaPage = () => {
           : post
       )
     );
-    await addDoc(collection(db, "media", mediaId, "comments"), {
-      ...newComment,
-      createdAt: serverTimestamp(),
-    });
+    try {
+      await axios.post("/api/v1/media/comment", {
+        mediaId,
+        comment: newComment,
+      });
+    } catch (err) {
+      console.error("Failed to submit comment:", err);
+    }
     setNewComments({ ...newComments, [mediaId]: "" });
   };
 
@@ -265,12 +319,22 @@ const MediaPage = () => {
   };
 
   const formatDate = (timestamp) => {
-    if (!timestamp) return "";
-    const date = timestamp.toDate ? timestamp.toDate() : timestamp;
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(date);
+    try {
+      const date =
+        timestamp && typeof timestamp === "object" && timestamp.toDate
+          ? timestamp.toDate()
+          : new Date(timestamp);
+
+      if (isNaN(date.getTime())) return ""; // fallback if date is invalid
+
+      return new Intl.DateTimeFormat("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+    } catch (e) {
+      console.error("Invalid timestamp:", timestamp);
+      return "";
+    }
   };
 
   return (
