@@ -26,6 +26,6 @@ export const END_POINTS = {
     FEED: `${API_URL}/media/feed`,
     LIKE: `${API_URL}/media/like`,
     SEARCH: `${API_URL}/media/search`,
-    SEARCH: `${API_URL}/media/comment`,
+    COMMENT: `${API_URL}/media/comment`,
   },
 };

@@ -17,12 +17,13 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import axios from "axios";
+import { END_POINTS } from "@/constants/endPoints";
+import { getData } from "@/services/apiServices/getData";
 
 const MediaPage = () => {
   const [items, setItems] = useState([]);
   const [newComments, setNewComments] = useState({});
   const [newReplies, setNewReplies] = useState({});
-  const [lastDoc, setLastDoc] = useState(null);
   const [lastCursor, setLastCursor] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const observerRef = useRef();
@@ -73,7 +74,7 @@ const MediaPage = () => {
 
   const fetchMedia = async (next = false) => {
     try {
-      const response = await axios.get("/api/v1/media/feed", {
+      const response = await axios.get(`${END_POINTS.MEDIA.FEED}`, {
         params: next && lastCursor ? { cursor: lastCursor } : {},
       });
 
@@ -100,9 +101,7 @@ const MediaPage = () => {
     if (!term.trim()) return fetchMedia();
     setIsSearching(true);
     try {
-      const response = await axios.get("/api/v1/media/search", {
-        params: { term },
-      });
+      const response = await getData(END_POINTS.MEDIA.SEARCH, { term });
       const results = await Promise.all(
         response.data.data.map(async (media) => {
           const { comments, last } = await fetchComments(media.id);
