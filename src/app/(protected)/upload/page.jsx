@@ -2,6 +2,8 @@
 import { useState } from "react";
 import axios from "axios";
 import { auth } from "@/firebase/config";
+import { postData } from "@/services/apiServices/postData";
+import { END_POINTS } from "@/constants/endPoints";
 
 const UploadPage = () => {
   const [file, setFile] = useState(null);
@@ -17,11 +19,11 @@ const UploadPage = () => {
       setError("Missing required fields or not authenticated.");
       return;
     }
-
+  
     setUploading(true);
     setError("");
     setSuccess(false);
-
+  
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -30,17 +32,17 @@ const UploadPage = () => {
       formData.append("people", people);
       formData.append("uid", auth.currentUser.uid);
       formData.append("displayName", auth.currentUser.displayName || "Unknown");
-
-      const response = await axios.post("/api/v1/creator/upload-post", formData);
-
-      if (response.data.success) {
+  
+      const response = await postData(END_POINTS.MEDIA.UPLOAD_POST, formData);
+  
+      if (response.success) {
         setSuccess(true);
         setTitle("");
         setLocation("");
         setPeople("");
         setFile(null);
       } else {
-        setError(response.data.message || "Upload failed.");
+        setError(response.message || "Upload failed.");
       }
     } catch (err) {
       console.error("Upload error:", err);
@@ -49,6 +51,7 @@ const UploadPage = () => {
       setUploading(false);
     }
   };
+  
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center px-4 py-8">

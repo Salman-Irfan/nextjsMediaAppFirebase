@@ -22,6 +22,7 @@ export const END_POINTS = {
   },
 
   MEDIA: {
+    UPLOAD_POST: `${API_URL}/creator/upload-post`,
     FEED: `${API_URL}/media/feed`,
     LIKE: `${API_URL}/media/like`,
     SEARCH: `${API_URL}/media/search`,
