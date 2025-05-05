@@ -1,9 +1,7 @@
-// src/app/upload/page.jsx
 "use client";
-import { db, storage, auth } from "@/firebase/config";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { addDoc, collection } from "firebase/firestore";
 import { useState } from "react";
+import axios from "axios";
+import { auth } from "@/firebase/config";
 
 const UploadPage = () => {
   const [file, setFile] = useState(null);
@@ -12,36 +10,41 @@ const UploadPage = () => {
   const [people, setPeople] = useState("");
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
 
   const handleUpload = async () => {
-    if (!file || !title) return;
+    if (!file || !title || !auth.currentUser) {
+      setError("Missing required fields or not authenticated.");
+      return;
+    }
 
     setUploading(true);
+    setError("");
+    setSuccess(false);
+
     try {
-      const storageRef = ref(storage, `media/${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", title);
+      formData.append("location", location);
+      formData.append("people", people);
+      formData.append("uid", auth.currentUser.uid);
+      formData.append("displayName", auth.currentUser.displayName || "Unknown");
 
-      const fileType = file.type.startsWith("video") ? "video" : "image";
+      const response = await axios.post("/api/v1/creator/upload-post", formData);
 
-      await addDoc(collection(db, "media"), {
-        title,
-        location,
-        people: people.split(",").map((p) => p.trim()),
-        url,
-        uid: auth.currentUser?.uid,
-        displayName: auth.currentUser?.displayName || "Unknown",
-        createdAt: new Date(),
-        type: fileType
-      });
-
-      setSuccess(true);
-      setTitle("");
-      setLocation("");
-      setPeople("");
-      setFile(null);
-    } catch (error) {
-      console.error("Upload error:", error);
+      if (response.data.success) {
+        setSuccess(true);
+        setTitle("");
+        setLocation("");
+        setPeople("");
+        setFile(null);
+      } else {
+        setError(response.data.message || "Upload failed.");
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError("An error occurred during upload.");
     } finally {
       setUploading(false);
     }
@@ -63,6 +66,9 @@ const UploadPage = () => {
           <div className="mb-4 text-green-600 text-sm text-center">
             ✅ Uploaded successfully!
           </div>
+        )}
+        {error && (
+          <div className="mb-4 text-red-600 text-sm text-center">{error}</div>
         )}
 
         <div className="space-y-4">
@@ -92,7 +98,7 @@ const UploadPage = () => {
 
           <input
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             onChange={(e) => setFile(e.target.files[0])}
             className="block w-full text-sm text-gray-500 dark:text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-gray-700 dark:file:text-gray-100"
           />
