@@ -4,7 +4,7 @@ const CloudIntegrationDetails = () => {
   return (
     <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 mb-8">
       <h2 className="text-2xl text-gray-900 dark:text-white font-semibold mb-4">
-        ☁️ Cloud-Native Architecture
+        Cloud-Native Architecture
       </h2>
       <div className="space-y-2 text-gray-700 dark:text-gray-200">
         <p>Highlights of our integration strategy:</p>

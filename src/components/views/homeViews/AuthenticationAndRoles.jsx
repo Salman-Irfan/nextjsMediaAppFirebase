@@ -4,7 +4,7 @@ const AuthenticationAndRoles = () => {
   return (
     <section className="bg-slate-50 dark:bg-slate-800 p-6 rounded-md shadow mb-8">
       <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100 mb-3">
-        🔐 Auth & Access Control
+        Auth & Access Control
       </h2>
       <div className="text-slate-700 dark:text-slate-300">
         <ul className="list-inside list-disc space-y-2">

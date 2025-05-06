@@ -118,33 +118,27 @@ const MediaPage = () => {
     const prevItems = [...items];
     const target = items.find((item) => item.id === mediaId);
     const prevLikes = target?.likes || 0;
-  
+
     // Optimistically update the UI
     setItems((prev) =>
-      prev.map((p) =>
-        p.id === mediaId ? { ...p, likes: prevLikes + 1 } : p
-      )
+      prev.map((p) => (p.id === mediaId ? { ...p, likes: prevLikes + 1 } : p))
     );
-  
+
     try {
       const res = await axios.post("/api/v1/media/like", { mediaId });
       const { newLikes } = res.data;
-  
+
       // Update with actual server response (in case it's out of sync)
       setItems((prev) =>
-        prev.map((p) =>
-          p.id === mediaId ? { ...p, likes: newLikes } : p
-        )
+        prev.map((p) => (p.id === mediaId ? { ...p, likes: newLikes } : p))
       );
     } catch (error) {
       console.error("Failed to like media:", error);
-  
+
       // Revert the optimistic update if server call fails
       setItems(prevItems);
     }
   };
-  
-  
 
   useEffect(() => {
     fetchMedia();
@@ -168,7 +162,7 @@ const MediaPage = () => {
 
   const handleLoadMoreComments = async (mediaId) => {
     const last = commentPageState[mediaId];
-  
+
     try {
       const commentQuery = query(
         collection(db, "media", mediaId, "comments"),
@@ -176,32 +170,35 @@ const MediaPage = () => {
         ...(last ? [startAfter(last)] : []),
         limit(3)
       );
-  
+
       const commentSnap = await getDocs(commentQuery);
-  
+
       const newComments = await Promise.all(
         commentSnap.docs.map(async (doc) => {
           const comment = { id: doc.id, ...doc.data() };
-          const { replies, last: lastReply } = await fetchReplies(mediaId, doc.id);
+          const { replies, last: lastReply } = await fetchReplies(
+            mediaId,
+            doc.id
+          );
           setReplyPageState((prev) => ({ ...prev, [doc.id]: lastReply }));
           return { ...comment, replies };
         })
       );
-  
+
       setItems((prev) =>
         prev.map((post) => {
           if (post.id !== mediaId) return post;
-  
+
           const seenIds = new Set(post.comments.map((c) => c.id));
           const filtered = newComments.filter((c) => !seenIds.has(c.id));
-  
+
           return {
             ...post,
             comments: [...post.comments, ...filtered],
           };
         })
       );
-  
+
       const newLast = commentSnap.docs[commentSnap.docs.length - 1];
       if (newLast) {
         setCommentPageState((prev) => ({ ...prev, [mediaId]: newLast }));
@@ -210,7 +207,6 @@ const MediaPage = () => {
       console.error("Failed to load more comments:", err);
     }
   };
-  
 
   const handleLoadMoreReplies = async (mediaId, commentId) => {
     const last = replyPageState[commentId];
@@ -383,19 +379,22 @@ const MediaPage = () => {
             className="bg-white dark:bg-gray-800 rounded-lg shadow"
           >
             {item.type === "video" ? (
-              <video
-                src={item.url}
-                controls
-                className="w-full h-auto rounded-lg"
-              />
+              <div className="w-full h-64 sm:h-72 md:h-80 overflow-hidden rounded-lg bg-black">
+                <video
+                  src={item.url}
+                  controls
+                  className="w-full h-full object-cover"
+                />
+              </div>
             ) : (
-              <img
-                src={item.url}
-                alt={item.title}
-                className="w-full h-auto object-cover rounded-lg"
-              />
+              <div className="w-full h-64 sm:h-72 md:h-80 overflow-hidden rounded-lg bg-gray-300 dark:bg-gray-700">
+                <img
+                  src={item.url}
+                  alt={item.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
             )}
-
             <div className="p-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                 {item.title}
