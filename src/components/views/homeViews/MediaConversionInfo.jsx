@@ -1,20 +1,27 @@
 import React from "react";
 
 const MediaConversionInfo = () => (
-  <section className="py-12 px-6 max-w-4xl mx-auto">
-    <h2 className="text-2xl font-bold mb-4">🎞️ Media Conversion & Limits</h2>
-    <ul className="list-disc ml-6 space-y-2">
-      <li>
-        <strong>Client-side image compression</strong> is implemented using the <code>browser-image-compression</code> library to reduce upload size and stay within Firebase free-tier limits.
-      </li>
-      <li>
-        <strong>Video files are uploaded as-is</strong> without compression, since client-side compression is inefficient, slow, and not natively supported in browsers.
-      </li>
-      <li>
-        <strong>Firebase Storage rules</strong> are enforced to prevent excessive bandwidth or storage usage that would exceed the free-tier quota.
-      </li>
-    </ul>
-  </section>
+  <div className="rounded border border-pink-300 dark:border-pink-600 p-6 bg-pink-50 dark:bg-pink-900 mb-8">
+    <h2 className="text-xl md:text-2xl font-semibold text-pink-800 dark:text-pink-200 mb-2">
+      🎞️ Media Conversion & Limits
+    </h2>
+    <article className="text-sm text-pink-900 dark:text-pink-100 space-y-2">
+      <p>
+        <strong>✔ Client-side image compression:</strong> Implemented via{" "}
+        <code>browser-image-compression</code> to reduce file size before
+        upload.
+      </p>
+      <p>
+        <strong>✖ Video compression:</strong> Not implemented; videos are
+        uploaded directly to Firebase Storage due to limitations in browser-side
+        processing.
+      </p>
+      <p>
+        <strong>📏 Firebase Storage rules:</strong> Applied to enforce upload
+        size limits and ensure fair usage under the free-tier quota.
+      </p>
+    </article>
+  </div>
 );
 
 export default MediaConversionInfo;

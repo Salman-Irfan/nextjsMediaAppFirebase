@@ -1,7 +1,10 @@
-// /app/api/v1/auth/signup/route.js
 import { NextResponse } from "next/server";
 import { auth, db } from "@/firebase/config";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendEmailVerification
+} from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export async function POST(request) {
@@ -17,6 +20,8 @@ export async function POST(request) {
 
     await updateProfile(user, { displayName: username });
 
+    await sendEmailVerification(user);
+
     await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
       email: user.email,
@@ -25,7 +30,11 @@ export async function POST(request) {
       createdAt: serverTimestamp()
     });
 
-    return NextResponse.json({ success: true, message: "User created", uid: user.uid });
+    return NextResponse.json({
+      success: true,
+      message: "User created. Verification email sent.",
+      uid: user.uid
+    });
   } catch (error) {
     console.error("Signup error:", error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

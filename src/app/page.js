@@ -10,13 +10,15 @@ import MediaConversionInfo from "@/components/views/homeViews/MediaConversionInf
 const HomePage = () => {
   return (
     <>
-      <HeroSection />
-      <CreatorFeatures />
-      <ConsumerFeatures />
-      <CloudIntegrationDetails />
-      <ScalabilityAndStorage />
-      <AuthenticationAndRoles />
-      <MediaConversionInfo />
+      <main className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white">
+        <HeroSection />
+        <CreatorFeatures />
+        <ConsumerFeatures />
+        <CloudIntegrationDetails />
+        <ScalabilityAndStorage />
+        <AuthenticationAndRoles />
+        <MediaConversionInfo />
+      </main>
     </>
   );
 };

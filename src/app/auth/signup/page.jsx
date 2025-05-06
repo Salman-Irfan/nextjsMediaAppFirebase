@@ -1,21 +1,21 @@
-// src/app/auth/signup/page.jsx
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { postData } from "@/services/apiServices/postData";
 import { END_POINTS } from "@/constants/endPoints";
+import { toast } from "react-hot-toast";
 
 const SignUpPage = () => {
+  const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
   const router = useRouter();
 
   const handleSignUp = async () => {
-    setError("");
+    setLoading(true);
     try {
       const data = await postData(END_POINTS.AUTH.SIGN_UP, {
         email,
@@ -24,12 +24,15 @@ const SignUpPage = () => {
       });
 
       if (data.success) {
-        router.push("/upload");
+        toast.success("Verification email sent. Please check your inbox.");
+        router.push("/auth/signin");
       } else {
-        setError(data.message || "Signup failed");
+        toast.error(data.message || "Signup failed");
       }
     } catch (err) {
-      setError("Failed to create account. Please try again.");
+      toast.error("Failed to create account. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -40,11 +43,8 @@ const SignUpPage = () => {
           Create Account
         </h2>
 
-        {error && (
-          <div className="mb-4 text-red-600 text-sm text-center">{error}</div>
-        )}
-
         <div className="space-y-4">
+          {/* Inputs remain unchanged */}
           <input
             type="text"
             placeholder="Username"
@@ -79,9 +79,14 @@ const SignUpPage = () => {
 
           <button
             onClick={handleSignUp}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded"
+            disabled={loading}
+            className={`w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded transition disabled:opacity-60 disabled:cursor-not-allowed`}
           >
-            Sign Up
+            {loading ? (
+              <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              "Sign Up"
+            )}
           </button>
 
           <p className="text-sm text-center text-gray-600 dark:text-gray-400">
