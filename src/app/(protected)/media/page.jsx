@@ -16,8 +16,10 @@ import axios from "axios";
 import { END_POINTS } from "@/constants/endPoints";
 import { getData } from "@/services/apiServices/getData";
 import { postData } from "@/services/apiServices/postData";
+import SkeletonMedia from "@/components/layouts/SkeletonMedia";
 
 const MediaPage = () => {
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [items, setItems] = useState([]);
   const [newComments, setNewComments] = useState({});
   const [newReplies, setNewReplies] = useState({});
@@ -71,6 +73,7 @@ const MediaPage = () => {
 
   const fetchMedia = async (next = false) => {
     try {
+      if (!next) setLoadingInitial(true);
       const response = await axios.get(`${END_POINTS.MEDIA.FEED}`, {
         params: next && lastCursor ? { cursor: lastCursor } : {},
       });
@@ -91,6 +94,8 @@ const MediaPage = () => {
       setLastCursor(response.data.nextCursor);
     } catch (err) {
       console.error("Failed to fetch media:", err);
+    } finally {
+      if (!next) setLoadingInitial(false);
     }
   };
 
@@ -373,144 +378,164 @@ const MediaPage = () => {
       </div>
 
       <div className="space-y-10 max-w-xl mx-auto">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow"
-          >
-            {item.type === "video" ? (
-              <div className="w-full h-64 sm:h-72 md:h-80 overflow-hidden rounded-lg bg-black">
-                <video
-                  src={item.url}
-                  controls
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="w-full h-64 sm:h-72 md:h-80 overflow-hidden rounded-lg bg-gray-300 dark:bg-gray-700">
-                <img
-                  src={item.url}
-                  alt={item.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
-            <div className="p-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {item.title}
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Posted by {item.displayName || "Unknown"} ·{" "}
-                {formatDate(item.createdAt)}
-              </p>
-              {item.location && (
-                <p className="text-sm text-gray-600 dark:text-gray-300">
-                  📍 {item.location}
-                </p>
+        {loadingInitial ? (
+          <SkeletonMedia />
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white dark:bg-gray-800 rounded-lg shadow"
+            >
+              {item.type === "video" ? (
+                <div className="w-full h-64 sm:h-72 md:h-80 overflow-hidden rounded-lg bg-black">
+                  <video
+                    src={item.url}
+                    controls
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-64 sm:h-72 md:h-80 overflow-hidden rounded-lg bg-gray-300 dark:bg-gray-700">
+                  <img
+                    src={item.url}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               )}
-              {item.people && item.people.length > 0 && (
-                <p className="text-sm text-gray-600 dark:text-gray-300">
-                  👥 With: {item.people.join(", ")}
+
+              <div className="p-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {item.title}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Posted by {item.displayName || "Unknown"} ·{" "}
+                  {formatDate(item.createdAt)}
                 </p>
-              )}
-              <button
-                onClick={() => handleLike(item.id)}
-                className="mt-2 text-blue-600 text-sm font-medium hover:underline"
-              >
-                👍 Like ({item.likes || 0})
-              </button>
-              <div className="mt-4 space-y-4">
-                {item.comments.map((comment) => (
-                  <div key={`${item.id}-${comment.id}`}>
-                    <p className="text-sm text-gray-800 dark:text-gray-200">
-                      <span className="font-semibold">
-                        {comment.displayName}:
-                      </span>{" "}
-                      {comment.text}
-                      <span className="text-xs text-gray-400 ml-2">
-                        {formatDate(comment.createdAt)}
-                      </span>
-                    </p>
-                    <div className="ml-4 mt-2 space-y-2 border-l border-gray-300 dark:border-gray-600 pl-4">
-                      {comment.replies.map((reply) => (
-                        <p
-                          key={`${comment.id}-${reply.id}`}
-                          className="text-sm text-gray-700 dark:text-gray-300"
-                        >
-                          <span className="font-medium">
-                            {reply.displayName}:
-                          </span>{" "}
-                          {reply.text}
-                          <span className="text-xs text-gray-400 ml-2">
-                            {formatDate(reply.createdAt)}
-                          </span>
-                        </p>
-                      ))}
-                      {replyPageState[comment.id] && (
-                        <button
-                          onClick={() =>
-                            handleLoadMoreReplies(item.id, comment.id)
-                          }
-                          className="text-sm text-blue-500 hover:underline"
-                        >
-                          Load more replies
-                        </button>
-                      )}
-                      <div className="flex gap-2">
-                        <input
-                          value={newReplies[comment.id] || ""}
-                          onChange={(e) =>
-                            setNewReplies({
-                              ...newReplies,
-                              [comment.id]: e.target.value,
-                            })
-                          }
-                          placeholder="Write a reply..."
-                          className="w-full text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
-                        />
-                        <button
-                          onClick={() => handleReplySubmit(item.id, comment.id)}
-                          className="text-blue-600 text-sm font-medium"
-                        >
-                          Reply
-                        </button>
+
+                {item.location && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    📍 {item.location}
+                  </p>
+                )}
+
+                {item.people && item.people.length > 0 && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    👥 With: {item.people.join(", ")}
+                  </p>
+                )}
+
+                <button
+                  onClick={() => handleLike(item.id)}
+                  className="mt-2 text-blue-600 text-sm font-medium hover:underline"
+                >
+                  👍 Like ({item.likes || 0})
+                </button>
+
+                {/* Comments */}
+                <div className="mt-4 space-y-4">
+                  {item.comments.map((comment) => (
+                    <div key={`${item.id}-${comment.id}`}>
+                      <p className="text-sm text-gray-800 dark:text-gray-200">
+                        <span className="font-semibold">
+                          {comment.displayName}:
+                        </span>{" "}
+                        {comment.text}
+                        <span className="text-xs text-gray-400 ml-2">
+                          {formatDate(comment.createdAt)}
+                        </span>
+                      </p>
+
+                      {/* Replies */}
+                      <div className="ml-4 mt-2 space-y-2 border-l border-gray-300 dark:border-gray-600 pl-4">
+                        {comment.replies.map((reply) => (
+                          <p
+                            key={`${comment.id}-${reply.id}`}
+                            className="text-sm text-gray-700 dark:text-gray-300"
+                          >
+                            <span className="font-medium">
+                              {reply.displayName}:
+                            </span>{" "}
+                            {reply.text}
+                            <span className="text-xs text-gray-400 ml-2">
+                              {formatDate(reply.createdAt)}
+                            </span>
+                          </p>
+                        ))}
+
+                        {replyPageState[comment.id] && (
+                          <button
+                            onClick={() =>
+                              handleLoadMoreReplies(item.id, comment.id)
+                            }
+                            className="text-sm text-blue-500 hover:underline"
+                          >
+                            Load more replies
+                          </button>
+                        )}
+
+                        <div className="flex gap-2">
+                          <input
+                            value={newReplies[comment.id] || ""}
+                            onChange={(e) =>
+                              setNewReplies({
+                                ...newReplies,
+                                [comment.id]: e.target.value,
+                              })
+                            }
+                            placeholder="Write a reply..."
+                            className="w-full text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
+                          />
+                          <button
+                            onClick={() =>
+                              handleReplySubmit(item.id, comment.id)
+                            }
+                            className="text-blue-600 text-sm font-medium"
+                          >
+                            Reply
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-                {commentPageState[item.id] && (
-                  <button
-                    onClick={() => handleLoadMoreComments(item.id)}
-                    className="text-sm text-blue-500 hover:underline"
-                  >
-                    Load more comments
-                  </button>
-                )}
-              </div>
+                  ))}
 
-              <div className="mt-4 flex gap-2">
-                <input
-                  value={newComments[item.id] || ""}
-                  onChange={(e) =>
-                    setNewComments({
-                      ...newComments,
-                      [item.id]: e.target.value,
-                    })
-                  }
-                  placeholder="Write a comment..."
-                  className="w-full text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-                <button
-                  onClick={() => handleCommentSubmit(item.id)}
-                  className="text-blue-600 text-sm font-medium"
-                >
-                  Post
-                </button>
+                  {commentPageState[item.id] && (
+                    <button
+                      onClick={() => handleLoadMoreComments(item.id)}
+                      className="text-sm text-blue-500 hover:underline"
+                    >
+                      Load more comments
+                    </button>
+                  )}
+                </div>
+
+                {/* Comment Input */}
+                <div className="mt-4 flex gap-2">
+                  <input
+                    value={newComments[item.id] || ""}
+                    onChange={(e) =>
+                      setNewComments({
+                        ...newComments,
+                        [item.id]: e.target.value,
+                      })
+                    }
+                    placeholder="Write a comment..."
+                    className="w-full text-sm px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                  <button
+                    onClick={() => handleCommentSubmit(item.id)}
+                    className="text-blue-600 text-sm font-medium"
+                  >
+                    Post
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-        {!isSearching && <div ref={observerRef} className="h-10" />}
+          ))
+        )}
+        {!loadingInitial && !isSearching && (
+          <div ref={observerRef} className="h-10" />
+        )}
       </div>
     </div>
   );
