@@ -4,6 +4,7 @@ import axios from "axios";
 import { auth } from "@/firebase/config";
 import { postData } from "@/services/apiServices/postData";
 import { END_POINTS } from "@/constants/endPoints";
+import imageCompression from "browser-image-compression";
 
 const UploadPage = () => {
   const [file, setFile] = useState(null);
@@ -19,22 +20,34 @@ const UploadPage = () => {
       setError("Missing required fields or not authenticated.");
       return;
     }
-  
+
     setUploading(true);
     setError("");
     setSuccess(false);
-  
+
     try {
+      let uploadFile = file;
+
+      // Only compress images (not videos)
+      if (file.type.startsWith("image/")) {
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1280,
+          useWebWorker: true,
+        };
+        uploadFile = await imageCompression(file, options);
+      }
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadFile);
       formData.append("title", title);
       formData.append("location", location);
       formData.append("people", people);
       formData.append("uid", auth.currentUser.uid);
       formData.append("displayName", auth.currentUser.displayName || "Unknown");
-  
+
       const response = await postData(END_POINTS.MEDIA.UPLOAD_POST, formData);
-  
+
       if (response.success) {
         setSuccess(true);
         setTitle("");
@@ -51,7 +64,6 @@ const UploadPage = () => {
       setUploading(false);
     }
   };
-  
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center px-4 py-8">
