@@ -4,6 +4,9 @@
 /node_modules
 package-lock.json
 .env
+.firebase
+.github
+
 /.pnp
 .pnp.*
 .yarn/*
