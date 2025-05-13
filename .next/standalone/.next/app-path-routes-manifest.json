@@ -1,0 +1,15 @@
+{
+  "/api/v1/auth/signup/route": "/api/v1/auth/signup",
+  "/api/v1/media/feed/route": "/api/v1/media/feed",
+  "/api/v1/creator/upload-post/route": "/api/v1/creator/upload-post",
+  "/api/v1/media/like/route": "/api/v1/media/like",
+  "/api/v1/media/comment/route": "/api/v1/media/comment",
+  "/api/v1/media/search/route": "/api/v1/media/search",
+  "/_not-found/page": "/_not-found",
+  "/favicon.ico/route": "/favicon.ico",
+  "/page": "/",
+  "/(protected)/media/page": "/media",
+  "/(protected)/upload/page": "/upload",
+  "/auth/signin/page": "/auth/signin",
+  "/auth/signup/page": "/auth/signup"
+}
