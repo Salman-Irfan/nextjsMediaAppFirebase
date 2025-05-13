@@ -26,7 +26,6 @@ jobs:
 
       - name: Upload .next folder
         uses: actions/upload-artifact@v3.1.3
-
         with:
           name: nextjs-build
           path: .next
